@@ -1,0 +1,161 @@
+name: Build win32 (.exe)
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+
+env:
+  LADYBIRD_SOURCE_DIR: ${{ github.workspace }}
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  VCPKG_ROOT: ${{ github.workspace }}/Build/vcpkg
+  CCACHE_COMPILERCHECK: "%compiler% -v"
+
+jobs:
+  build-windows:
+    name: Windows Release Build
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Checkout Upstream Ladybird Code
+        uses: actions/checkout@v4
+        with:
+          repository: 'LadybirdBrowser/ladybird'
+          ref: 'master'
+
+      - name: Get Upstream Commit Hash
+        id: upstream_info
+        run: |
+          $shortSha = git rev-parse --short HEAD
+          echo "UPSTREAM_SHA=$shortSha" >> $env:GITHUB_ENV
+        shell: pwsh
+
+      - name: Set Up Environment
+        uses: ./.github/actions/setup
+        with:
+          os: 'Windows'
+          arch: 'x86_64'
+          toolchain: 'ClangCL'
+
+      - name: Restore Caches
+        uses: ./.github/actions/cache-restore
+        id: 'cache-restore'
+        with:
+          runner_labels: '["windows-latest"]'
+          os: 'Windows'
+          arch: 'x86_64'
+          toolchain: 'ClangCL'
+          cache_key_extra: 'Windows_CI'
+          ccache_path: ${{ env.CCACHE_DIR }}
+          download_cache_path: ${{ github.workspace }}/Build/caches
+          vcpkg_cache_path: ${{ github.workspace }}/Build/caches/vcpkg-binary-cache
+
+      - name: Configure CMake
+        working-directory: ${{ github.workspace }}
+        run: |
+          cmake --preset Release -B Build `
+            -DENABLE_CI_BASELINE_CPU=ON `
+            -DENABLE_TESTS=OFF `
+            -DBUILD_TESTING=OFF `
+            -DENABLE_LAGOM_TESTS=OFF
+
+      - name: Build
+        working-directory: ${{ github.workspace }}/Build
+        run: |
+          cmake --build .
+          cmake --install . --strip --prefix ${{ github.workspace }}/Install
+
+      - name: Bundle DLLs
+        run: |
+          $installDir = "${{ github.workspace }}/Install"
+          $binDir = "$installDir/bin"
+          $buildDir = "${{ github.workspace }}/Build"
+
+          if (!(Test-Path $binDir)) { New-Item -ItemType Directory -Path $binDir }
+
+          Write-Host "Copying dependencies..."
+          Copy-Item "$buildDir/vcpkg_installed/x64-windows/bin/*.dll" -Destination $binDir -Force -ErrorAction SilentlyContinue
+
+          Write-Host "Searching for qwindows.dll..."
+          $qwindowsFile = Get-ChildItem -Path "$buildDir/vcpkg_installed" -Recurse -Filter "qwindows.dll" | Select-Object -First 1
+          
+          if ($qwindowsFile) {
+             $destPlatforms = "$binDir/platforms"
+             New-Item -ItemType Directory -Force -Path $destPlatforms
+             Write-Host "Found qwindows at $($qwindowsFile.FullName)"
+             Copy-Item $qwindowsFile.FullName -Destination $destPlatforms -Force
+          } else {
+             Write-Error "Could not find qwindows.dll in build directory!"
+          }
+
+          Write-Host "Searching for Qt Image Formats..."
+          $qjpegFile = Get-ChildItem -Path "$buildDir/vcpkg_installed" -Recurse -Filter "qjpeg.dll" | Select-Object -First 1
+          
+          if ($qjpegFile) {
+             $sourceImgDir = $qjpegFile.DirectoryName
+             $destImgFormats = "$binDir/imageformats"
+             New-Item -ItemType Directory -Force -Path $destImgFormats
+             Write-Host "Found imageformats at $sourceImgDir"
+             Copy-Item "$sourceImgDir/*.dll" -Destination $destImgFormats -Force
+          }
+
+          if (Test-Path "$installDir/libexec") {
+              Write-Host "Moving helper executables..."
+              Copy-Item "$installDir/libexec/*.exe" -Destination $binDir -Force
+              Remove-Item "$installDir/libexec" -Recurse -Force
+          }
+          
+          Write-Host "Removing development headers and libs..."
+          Remove-Item -Path "$installDir/include" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "$installDir/lib" -Recurse -Force -ErrorAction SilentlyContinue
+
+      - name: Zip Release Artifacts
+        run: |
+          Compress-Archive -Path ${{ github.workspace }}/Install/* -DestinationPath Ladybird-Windows-Release.zip -Force
+        shell: pwsh
+
+      - name: Upload Windows Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ladybird-Windows-Release
+          path: Ladybird-Windows-Release.zip
+          if-no-files-found: error
+
+      - name: Set Release Variables
+        id: set_vars
+        run: |
+          $releaseDate = Get-Date -Format "yyyyMMdd"
+          $releaseTag = "v${releaseDate}-${{ github.run_number }}"
+          $releaseName = "Release ${releaseDate} (Run ${{ github.run_number }})"
+          echo "RELEASE_TAG=$releaseTag" >> $env:GITHUB_ENV
+          echo "RELEASE_NAME=$releaseName" >> $env:GITHUB_ENV
+        shell: pwsh
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_NAME }}
+          body: |
+            Automated weekly release built directly from upstream commit LadybirdBrowser/ladybird@${{ env.UPSTREAM_SHA }}.
+          draft: false
+          prerelease: false
+          files: |
+            Ladybird-Windows-Release.zip
+
+      - name: Save Caches
+        uses: ./.github/actions/cache-save
+        with:
+          runner_labels: '["windows-latest"]'
+          arch: 'x86_64'
+          ccache_path: ${{ env.CCACHE_DIR }}
+          ccache_primary_key: ${{ steps.cache-restore.outputs.ccache_primary_key }}
+          vcpkg_cache_path: ${{ github.workspace }}/Build/caches/vcpkg-binary-cache
+          vcpkg_cache_primary_key: ${{ steps.cache-restore.outputs.vcpkg_cache_primary_key }}

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Download experimental native Windows (.exe) builds of the Ladybird web browser. Automated weekly releases from the Ladybird master branch.">
+    <meta name="keywords" content="Ladybird browser, Ladybird Windows, Ladybird .exe, Ladybird native build, Ladybird download Windows, Ladybird autobuild">
+    <meta name="author" content="Elwynsiaa">
+    <meta property="og:title" content="Ladybird Browser - Windows Autobuilds">
+    <meta property="og:description" content="Download experimental native Windows (.exe) builds of the Ladybird web browser.">
+    <meta property="og:image" content="https://github.com/user-attachments/assets/62e81356-e483-4fdd-8548-4d6499b252e9">
+    <meta property="og:type" content="website">
+
+    <title>Ladybird Browser - Native Windows Autobuilds</title>
+    
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #0d1117; color: #c9d1d9; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.5; }
+        h1 { border-bottom: 1px solid #30363d; padding-bottom: 10px; margin-bottom: 10px; }
+        .seo-text { color: #8b949e; font-size: 1.05em; margin-bottom: 20px; }
+        .hero-image { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid #30363d; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+        .release { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 20px; margin-bottom: 20px; transition: all 0.2s ease-in-out; }
+        .release.highlighted { border: 1px solid #d29922; background: #1f1b0f; }
+        .badge { display: inline-block; background: #d29922; color: #ffffff; font-size: 0.5em; padding: 4px 10px; border-radius: 12px; vertical-align: middle; margin-left: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
+        .release h2 { margin-top: 0; margin-bottom: 5px; color: #58a6ff; font-size: 1.5em; display: flex; align-items: center; }
+        .date { font-size: 0.9em; color: #8b949e; margin-bottom: 15px; }
+        .download-btn { display: inline-block; background: #238636; color: #ffffff; padding: 10px 18px; text-decoration: none; border-radius: 6px; font-weight: bold; margin-top: 10px; border: 1px solid rgba(240,246,252,0.1); }
+        .download-btn:hover { background: #2ea043; border-color: rgba(240,246,252,0.1); }
+        .warning { background: #3b2300; border: 1px solid #f0b32f; color: #e3b341; padding: 15px; border-radius: 6px; margin-bottom: 25px; }
+        a { color: #58a6ff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <h1>Ladybird Windows Autobuilds</h1>
+    
+    <p class="seo-text">
+        Unofficial repository providing automated native Windows (.exe) binaries for the <a href="https://ladybird.dev/" target="_blank">Ladybird web browser</a>. 
+        These weekly builds are compiled directly from the upstream master branch using GitHub Actions.
+    </p>
+
+    <img src="https://github.com/user-attachments/assets/62e81356-e483-4fdd-8548-4d6499b252e9" alt="Ladybird Browser running on Windows native build" class="hero-image">
+    
+    <div class="warning">
+        <strong>⚠️ Warning:</strong> These are automated native Windows builds tracking the Ladybird `master` branch. As native Windows support is highly experimental, <strong>most builds are expected not to work or may crash.</strong>
+    </div>
+
+    <div id="releases-container">Loading latest Ladybird Windows releases...</div>
+
+    <script>
+        const repo = 'Elwynsiaa/ladybird-windows-autobuild'; 
+        
+        const apiUrl = `https://api.github.com/repos/${repo}/releases`;
+        const container = document.getElementById('releases-container');
+
+        const knownWorkingBuildTag = "20260403"; 
+
+        async function fetchReleases() {
+            try {
+                const response = await fetch(apiUrl);
+                if (!response.ok) throw new Error('Failed to fetch releases');
+                const releases = await response.json();
+                
+                container.innerHTML = ''; 
+
+                if (releases.length === 0) {
+                    container.innerHTML = '<p>No releases found yet.</p>';
+                    return;
+                }
+
+                releases.forEach(release => {
+                    const date = new Date(release.published_at).toLocaleDateString(undefined, { 
+                        year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
+                    });
+                    
+                    const releaseDiv = document.createElement('div');
+                    releaseDiv.className = 'release';
+                    
+                    const isWorkingBuild = (release.name && release.name.includes(knownWorkingBuildTag)) || 
+                                           (release.tag_name && release.tag_name.includes(knownWorkingBuildTag));
+                    
+                    if (isWorkingBuild) {
+                        releaseDiv.classList.add('highlighted');
+                    }
+
+                    const zipAsset = release.assets.find(a => a.name.endsWith('.zip'));
+                    
+                    const downloadHtml = zipAsset 
+                        ? `<a href="${zipAsset.browser_download_url}" class="download-btn">⬇️ Download Windows .zip</a>` 
+                        : `<p style="color: #f85149;">No compiled .zip asset found for this release.</p>`;
+
+                    const badgeHtml = isWorkingBuild ? `<span class="badge" title="This build is known to successfully launch and render pages">🌟 Best Known Working Build</span>` : '';
+
+                    releaseDiv.innerHTML = `
+                        <h2><a href="${release.html_url}" target="_blank">${release.name || release.tag_name}</a> ${badgeHtml}</h2>
+                        <div class="date">📅 Published on ${date}</div>
+                        <p>${release.body ? release.body : 'Automated CI build.'}</p>
+                        ${downloadHtml}
+                    `;
+                    container.appendChild(releaseDiv);
+                });
+            } catch (error) {
+                container.innerHTML = `<p style="color: #f85149;">Error loading releases: ${error.message}</p>`;
+            }
+        }
+
+        fetchReleases();
+    </script>
+</body>
+</html>
