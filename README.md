@@ -1,6 +1,6 @@
 # Ladybird Windows Autobuilds
 
-[![Build win32 (.exe)](https://github.com/Elwynsiaa/ladybird-windows-autobuild/actions/workflows/build-win32.yml/badge.svg)](https://github.com/Elwynsiaa/ladybird-windows-autobuild/actions)
+[![Build win32 (.exe)](https://github.com/Elwynsiaa/ladybird-windows-autobuild/actions/workflows/build-windows-exe.yml/badge.svg)](https://github.com/Elwynsiaa/ladybird-windows-autobuild/actions/workflows/build-windows-exe.yml)
 [![Latest Release](https://img.shields.io/github/v/release/Elwynsiaa/ladybird-windows-autobuild?include_prereleases&color=blue&label=latest%20build)](https://github.com/Elwynsiaa/ladybird-windows-autobuild/releases)
 [![Web Directory](https://img.shields.io/badge/Website-GitHub%20Pages-181717?logo=github&logoColor=white)](https://elwynsiaa.github.io/ladybird-windows-autobuild/)
 [![Upstream](https://img.shields.io/badge/Upstream-LadybirdBrowser%2Fladybird-ff69b4)](https://github.com/LadybirdBrowser/ladybird)
